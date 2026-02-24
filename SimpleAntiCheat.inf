@@ -1,0 +1,49 @@
+;
+; SimpleAntiCheat.inf
+;
+
+[Version]
+Signature="$WINDOWS NT$"
+Class=System
+ClassGuid={4d36e97d-e325-11ce-bfc1-08002be10318}
+Provider=%ManufacturerName%
+DriverVer=1.0.0.0
+CatalogFile=SimpleAntiCheat.cat
+PnpLockdown=1
+
+[DestinationDirs]
+DefaultDestDir = 13 ; Have used %12% (System32/Drivers) in the past but it causes issues with driver signing now. DriverStore is recommended way
+
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles]
+SimpleAntiCheat.sys = 1 
+
+[Manufacturer]
+%ManufacturerName%=Standard,NT$ARCH$.10.0...16299
+
+[Standard.NT$ARCH$.10.0...16299]
+%DeviceDesc% = SimpleAntiCheat_Install, Root\SimpleAntiCheat
+
+[SimpleAntiCheat_Install]
+CopyFiles = SimpleAntiCheat.Copy
+
+[SimpleAntiCheat_Install.Services]
+AddService = SimpleAntiCheat, 2, SimpleAntiCheat_Service
+
+[SimpleAntiCheat.Copy]
+SimpleAntiCheat.sys
+
+[SimpleAntiCheat_Service]
+DisplayName    = %ServiceDisplayName%
+ServiceType    = 1           ; KERNEL_DRIVER
+StartType      = 0           ; BOOT_START (loads very early)  or 1 = SYSTEM_START
+ErrorControl   = 1
+ServiceBinary  = %13%\SimpleAntiCheat.sys
+
+[Strings]
+ManufacturerName="Chuccle"
+DiskName="SimpleAntiCheat Source Disk"
+DeviceDesc="SimpleAntiCheat Device"
+ServiceDisplayName="SimpleAntiCheat Service"
