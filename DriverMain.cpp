@@ -259,7 +259,7 @@ static NTSTATUS ScanHandles()
         return STATUS_UNSUCCESSFUL;
     }
 
-    for (ULONG i = 0; i < handleInfo->NumberOfHandles; i++)
+    for (ULONG_PTR i = 0; i < handleInfo->NumberOfHandles; i++)
     {
         PSYSTEM_HANDLE_TABLE_ENTRY_INFO_EX handleEntry = &handleInfo->Handles[i];
 
