@@ -1,0 +1,128 @@
+name: "CodeQL Advanced"
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+  schedule:
+    - cron: '41 23 * * 6'
+
+env:
+  SOLUTION_NAME: SimpleAntiCheat.sln
+  ChocolateyUseWindowsCompression: 'true'
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ${{ (matrix.language == 'c-cpp' && 'windows-latest') || ((matrix.language == 'swift' && 'macos-latest') || 'ubuntu-latest') }}
+    timeout-minutes: 60
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - language: actions
+          build-mode: none
+        - language: c-cpp
+          build-mode: manual
+          config: Release
+          platform: x64
+    
+    steps:
+    - name: Detect if Dependabot
+      if: matrix.language == 'c-cpp'
+      id: is_dependabot
+      shell: pwsh
+      run: echo "is_dependabot=${{ github.actor == 'dependabot[bot]' }}" >> $env:GITHUB_OUTPUT
+
+    - name: Checkout repository
+      uses: actions/checkout@v5
+      with:
+        token: ${{ (matrix.language == 'c-cpp' && steps.is_dependabot.outputs.is_dependabot == 'true') && secrets.GH_DEPENDABOT_PAT || secrets.GH_PAT || github.token }}
+        submodules: ${{ matrix.language == 'c-cpp' && 'recursive' || false }}
+
+    - name: Cache NuGet packages
+      if: matrix.language == 'c-cpp'
+      uses: actions/cache@v4
+      with:
+        path: ./packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.config') }}
+        restore-keys: ${{ runner.os }}-nuget-
+
+    - name: Setup Developer Command Prompt
+      if: matrix.language == 'c-cpp'
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: ${{ matrix.platform }}
+
+    - name: Obtain WDK from Nuget
+      if: matrix.language == 'c-cpp'
+      run: |
+        echo "Restoring NuGet packages..."
+        nuget restore ${{ env.SOLUTION_NAME }} -PackagesDirectory ".\packages"
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "NuGet restore failed"
+          exit 1
+        }
+
+    - name: Initialize CodeQL (C/C++)
+      if: matrix.language == 'c-cpp'
+      uses: github/codeql-action/init@v4
+      with:
+        languages: ${{ matrix.language }}
+        build-mode: ${{ matrix.build-mode }}
+        packs: microsoft/windows-drivers@1.1.0
+        queries: security-extended,security-and-quality
+
+    - name: Initialize CodeQL (Actions)
+      if: matrix.language == 'actions'
+      uses: github/codeql-action/init@v4
+      with:
+        languages: ${{ matrix.language }}
+        build-mode: ${{ matrix.build-mode }}
+        queries: security-extended,security-and-quality
+
+    - name: Build driver for CodeQL analysis
+      if: matrix.language == 'c-cpp'
+      run: |
+        echo "Building solution: ${{ env.SOLUTION_NAME }}"
+        msbuild ${{ env.SOLUTION_NAME }} /p:Configuration=${{ matrix.config }} /p:Platform=${{ matrix.platform }} /m /verbosity:minimal
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Build failed"
+          exit 1
+        }
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v4
+      with:
+        category: "/language:${{ matrix.language }}"
+        output: 'sarif-results'
+        upload: 'never'
+
+    - name: Filter-sarif
+      if: matrix.language == 'c-cpp'
+      uses: advanced-security/filter-sarif@v1
+      with:
+        patterns: |
+          -packages/**
+          -systeminformer/**
+        input:  sarif-results/cpp.sarif
+        output: sarif-results/cpp.sarif
+
+    - name: Upload SARIF
+      uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: sarif-results
+
+    - name: Upload loc as a Build Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: sarif-results-${{ matrix.language }}
+        path: sarif-results
+        retention-days: 1

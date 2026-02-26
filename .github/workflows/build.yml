@@ -1,0 +1,64 @@
+name: Build SimpleAntiCheat
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+permissions:
+  contents: read
+  packages: read
+  actions: read
+
+env:
+  SOLUTION_NAME: SimpleAntiCheat.sln
+  ChocolateyUseWindowsCompression: 'true'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        config: [Release, Debug]
+        platform: [x64]
+    name: Build ${{ matrix.config }} ${{ matrix.platform }}
+
+    steps:
+    - name: Detect if Dependabot
+      id: is_dependabot
+      shell: pwsh
+      run: echo "is_dependabot=${{ github.actor == 'dependabot[bot]' }}" >> $env:GITHUB_OUTPUT
+
+    - name: Checkout repository and submodules
+      uses: actions/checkout@v5
+      with:
+        token: ${{ steps.is_dependabot.outputs.is_dependabot == 'true' && secrets.GH_DEPENDABOT_PAT || secrets.GH_PAT }}
+        submodules: recursive
+
+    - name: Cache NuGet packages
+      uses: actions/cache@v4
+      with:
+        path: ./packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.config') }}
+        restore-keys: ${{ runner.os }}-nuget-
+
+    - name: Setup Developer Command Prompt
+      uses: ilammy/msvc-dev-cmd@v1
+
+    - name: Obtain WDK from Nuget
+      run: nuget restore ${{ env.SOLUTION_NAME }} -PackagesDirectory ".\packages"
+
+    - name: Build driver
+      run: msbuild ${{ env.SOLUTION_NAME }} /p:Configuration=${{ matrix.config }} /p:Platform=${{ matrix.platform }} /bl # /bl creates msbuild.binlog
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: SimpleAntiCheat.sln${{ matrix.config }}-${{ matrix.platform }}
+        path: |
+          ${{ github.workspace }}/${{ matrix.platform }}/${{ matrix.config }}/BlorgFS.*
+          ${{ github.workspace }}/${{ matrix.platform }}/${{ matrix.config }}/*.inf
+          ${{ github.workspace }}/${{ matrix.platform }}/${{ matrix.config }}/*.cat
+          ${{ github.workspace }}/msbuild.binlog # Upload the build log
+        if-no-files-found: warn
