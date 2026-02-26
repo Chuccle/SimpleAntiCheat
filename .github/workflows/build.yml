@@ -53,7 +53,7 @@ jobs:
       run: msbuild ${{ env.SOLUTION_NAME }} /p:Configuration=${{ matrix.config }} /p:Platform=${{ matrix.platform }} /bl # /bl creates msbuild.binlog
 
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: SimpleAntiCheat.sln${{ matrix.config }}-${{ matrix.platform }}
         path: |
