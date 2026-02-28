@@ -19,8 +19,7 @@ struct Globals
     KEVENT ThreadStopEvent;
     SimpleACProcess ProtectedProcess;
     PVOID ObCallbackHandle;
-    PVOID ScanThreadHandle;
-    KernelAtomicFlag StopThread;
+    PVOID ScanThreadObject;
 } global;
 
 // The reason why it's actually advantageous to hardcode this, is that an alternative might be to have it supplied by a usermode accessible means like an IOCTL.
@@ -415,7 +414,7 @@ static NTSTATUS ScanExecutableMemory()
 
     interval.QuadPart = -static_cast<LONG64>((SCAN_INTERVAL_MS * 10000));
 
-    while (!global.StopThread.Get())
+    while (true)
     {
         NTSTATUS status = KeWaitForSingleObject(
             &global.ThreadStopEvent,
@@ -424,7 +423,7 @@ static NTSTATUS ScanExecutableMemory()
             false,
             &interval);
 
-        if (status != STATUS_TIMEOUT)
+        if (status != STATUS_TIMEOUT) [[unlikely]]
         {
             break;
         }
@@ -514,19 +513,19 @@ VOID DriverUnload(IN PDRIVER_OBJECT DriverObject)
         global.ProtectedProcess.ProcessObject.Reset();
     }
 
-    global.StopThread.Set();
     KeSetEvent(&global.ThreadStopEvent, IO_NO_INCREMENT, false);
 
-    if (global.ScanThreadHandle)
+    if (global.ScanThreadObject)
     {
-        KeWaitForSingleObject(global.ScanThreadHandle, Executive, KernelMode, false, nullptr);
-        ObDereferenceObject(global.ScanThreadHandle);
-        global.ScanThreadHandle = nullptr;
+        KeWaitForSingleObject(global.ScanThreadObject, Executive, KernelMode, false, nullptr);
+        ObDereferenceObject(global.ScanThreadObject );
+        global.ScanThreadObject = nullptr;
     }
 
     if (global.ObCallbackHandle)
     {
         ObUnRegisterCallbacks(global.ObCallbackHandle);
+        global.ObCallbackHandle = nullptr;
     }
 
 }
@@ -592,15 +591,15 @@ extern "C" NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING Reg
         THREAD_ALL_ACCESS,
         nullptr,
         KernelMode,
-        &global.ScanThreadHandle,
+        &global.ScanThreadObject,
         nullptr);
 
     ZwClose(threadHandle);
 
     if (!NT_SUCCESS(status))
     {
-        global.StopThread.Set();
         KdPrint(("[SimpleAntiCheat] Failed to reference thread object: 0x%X\n", status));
+		KeSetEvent(&global.ThreadStopEvent, IO_NO_INCREMENT, false);
         ObUnRegisterCallbacks(global.ObCallbackHandle);
         PsSetCreateProcessNotifyRoutine(ProcessNotifyRoutine, true);
         return status;
