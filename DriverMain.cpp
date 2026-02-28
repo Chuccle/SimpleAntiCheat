@@ -84,30 +84,28 @@ VOID ProcessNotifyRoutine(
 
     if (Create)
     {
-        if (global.ProtectedProcess.ProcessObject.Get() == nullptr)
-        {
-            {
-                PushLockExclusive lock(&global.ProtectedProcess.SharedLock);
-                global.ProtectedProcess.ProcessId = ProcessId;
-                global.ProtectedProcess.ProcessObject = kernel_std::move(processObject); // ensure we keep a reference globally
-            }
+       PushLockExclusive lock(&global.ProtectedProcess.SharedLock);
 
-            KdPrint(("[SimpleAntiCheat] Protected process started: %wZ (PID: %p)\n",
-                procImageName.Get(), ProcessId));
-        }
+       if (!global.ProtectedProcess.ProcessObject)
+       {
+           KdPrint(("[SimpleAntiCheat] Protected process started: %wZ (PID: %p)\n",
+              procImageName.Get(), ProcessId));
+           
+           global.ProtectedProcess.ProcessId = ProcessId;
+           global.ProtectedProcess.ProcessObject = kernel_std::move(processObject);
+       }
     }
     else
     {
+        PushLockExclusive lock( &global.ProtectedProcess.SharedLock );
+
         if (global.ProtectedProcess.ProcessId == ProcessId)
         {
             KdPrint(("[SimpleAntiCheat] Protected process stopped: %wZ (PID: %p)\n",
                 procImageName.Get(), ProcessId));
 
-            {
-                PushLockExclusive lock(&global.ProtectedProcess.SharedLock);
-                global.ProtectedProcess.ProcessId = nullptr;
-                global.ProtectedProcess.ProcessObject.Reset();
-            }
+            global.ProtectedProcess.ProcessId = nullptr;
+            global.ProtectedProcess.ProcessObject.Reset();
         }
     }
 }
