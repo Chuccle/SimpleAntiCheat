@@ -505,6 +505,9 @@ VOID DriverUnload(IN PDRIVER_OBJECT DriverObject)
 
     DriverCppCleanup();
 
+    // Looking at the disassembly, this seems synchronous. Flushes concurrent callbacks.
+    PsSetCreateProcessNotifyRoutine(ProcessNotifyRoutine, true);
+
     {
         PushLockExclusive lock(&global.ProtectedProcess.SharedLock);
         global.ProtectedProcess.ProcessId = nullptr;
@@ -526,7 +529,6 @@ VOID DriverUnload(IN PDRIVER_OBJECT DriverObject)
         ObUnRegisterCallbacks(global.ObCallbackHandle);
     }
 
-    PsSetCreateProcessNotifyRoutine(ProcessNotifyRoutine, true);
 }
 
 extern "C" NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
