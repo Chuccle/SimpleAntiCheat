@@ -224,7 +224,7 @@ static NTSTATUS ScanHandles()
             {
                 auto handleInfoBuffer = KernelSmartPointer<SYSTEM_HANDLE_INFORMATION_EX>(
                     static_cast<PSYSTEM_HANDLE_INFORMATION_EX>(
-                        ExAllocatePoolUninitialized(NonPagedPool, size, 'hSAC')));
+                        ExAllocatePoolUninitialized(PagedPool, size, 'hSAC')));
 
                 if (!handleInfoBuffer)
                 {
