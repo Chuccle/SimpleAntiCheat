@@ -77,7 +77,7 @@ jobs:
       with:
         languages: ${{ matrix.language }}
         build-mode: ${{ matrix.build-mode }}
-        packs: microsoft/windows-drivers@1.1.0
+	packs: microsoft/windows-drivers,microsoft/cpp-queries
         queries: security-extended,security-and-quality
 
     - name: Initialize CodeQL (Actions)
