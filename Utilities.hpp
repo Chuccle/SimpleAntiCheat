@@ -1,5 +1,82 @@
 #pragma once
 
+template<typename T>
+struct StatusResult
+{
+    NTSTATUS Status;
+    T Value;
+
+    [[nodiscard]] bool Success() const noexcept
+    {
+        return NT_SUCCESS(Status);
+    }
+};
+
+class KernelHandle
+{
+public:
+    explicit KernelHandle(HANDLE Handle = nullptr) noexcept
+        : Handle_(Handle)
+    {
+    }
+
+    ~KernelHandle() noexcept
+    {
+        if (Handle_)
+        {
+            ZwClose(Handle_);
+        }
+    }
+
+    KernelHandle(const KernelHandle&) = delete;
+    KernelHandle& operator=(const KernelHandle&) = delete;
+
+    KernelHandle(KernelHandle&& Other) noexcept
+    {
+        Reset(Other.Release());
+    }
+
+    KernelHandle& operator=(KernelHandle&& Other) noexcept
+    {
+        if (this != &Other)
+        {
+            Reset(Other.Release());
+        }
+
+        return *this;
+    }
+
+    [[nodiscard]] HANDLE Get() const noexcept
+    {
+        return Handle_;
+    }
+
+    explicit operator bool() const noexcept
+    {
+        return Handle_ != nullptr;
+    }
+
+    void Reset(HANDLE NewHandle = nullptr) noexcept
+    {
+        if (Handle_)
+        {
+            ZwClose(Handle_);
+        }
+
+        Handle_ = NewHandle;
+    }
+
+    HANDLE Release() noexcept
+    {
+        HANDLE handle = Handle_;
+        Handle_ = nullptr;
+        return handle;
+    }
+
+private:
+    HANDLE Handle_;
+};
+
 template<typename P>
 class KernelObjectRef
 {
@@ -64,10 +141,23 @@ public:
 
     void AddRef()
     {
-        if (Obj_)
+        NT_ASSERT(Obj_);
+        ObReferenceObject(Obj_);
+    }
+
+    // Internally this increases object reference count so we don't need to worry about lifetime
+    [[nodiscard]] StatusResult<KernelHandle> GetKernelHandle(ACCESS_MASK DesiredAccess = 0)
+    {
+        if (!Obj_)
         {
-            ObReferenceObject(Obj_);
+            return { STATUS_INVALID_HANDLE, KernelHandle() };
         }
+
+        HANDLE handle;
+
+        NTSTATUS status = ObOpenObjectByPointer(Obj_, OBJ_KERNEL_HANDLE, nullptr, DesiredAccess, nullptr, KernelMode, &handle);
+
+        return { status, NT_SUCCESS(status) ? KernelHandle(handle) : KernelHandle() };
     }
 
 private:

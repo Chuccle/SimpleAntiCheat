@@ -84,20 +84,20 @@ VOID ProcessNotifyRoutine(
 
     if (Create)
     {
-       PushLockExclusive lock(&global.ProtectedProcess.SharedLock);
+        PushLockExclusive lock(&global.ProtectedProcess.SharedLock);
 
-       if (!global.ProtectedProcess.ProcessObject)
-       {
-           KdPrint(("[SimpleAntiCheat] Protected process started: %wZ (PID: %p)\n",
-              procImageName.Get(), ProcessId));
-           
-           global.ProtectedProcess.ProcessId = ProcessId;
-           global.ProtectedProcess.ProcessObject = kernel_std::move(processObject);
-       }
+        if (!global.ProtectedProcess.ProcessObject)
+        {
+            KdPrint(("[SimpleAntiCheat] Protected process started: %wZ (PID: %p)\n",
+                procImageName.Get(), ProcessId));
+
+            global.ProtectedProcess.ProcessId = ProcessId;
+            global.ProtectedProcess.ProcessObject = kernel_std::move(processObject);
+        }
     }
     else
     {
-        PushLockExclusive lock( &global.ProtectedProcess.SharedLock );
+        PushLockExclusive lock(&global.ProtectedProcess.SharedLock);
 
         if (global.ProtectedProcess.ProcessId == ProcessId)
         {
@@ -316,11 +316,14 @@ static NTSTATUS ScanExecutableMemory()
         targetProcess.AddRef();
     }
 
-    // Attach to target process context
-    KAPC_STATE apcState;
-    KeStackAttachProcess(targetProcess.Get(), &apcState);
-
     KdPrint(("[SimpleAntiCheat] === Scanning executable memory regions ===\n"));
+
+    auto result = targetProcess.GetKernelHandle();
+
+    if (!result.Success())
+    {
+        return result.Status;
+    }
 
     PVOID baseAddress = nullptr;
     while (baseAddress < MmHighestUserAddress)
@@ -329,7 +332,7 @@ static NTSTATUS ScanExecutableMemory()
         SIZE_T returnLength;
 
         NTSTATUS status = ZwQueryVirtualMemory(
-            ZwCurrentProcess(),
+            result.Value.Get(),
             baseAddress,
             static_cast<MEMORY_INFORMATION_CLASS>(MemoryBasicInformation),
             &memInfo,
@@ -396,8 +399,6 @@ static NTSTATUS ScanExecutableMemory()
 
         baseAddress = reinterpret_cast<PVOID>(reinterpret_cast<ULONG_PTR>(memInfo.BaseAddress) + memInfo.RegionSize);
     }
-
-    KeUnstackDetachProcess(&apcState);
 
     return STATUS_SUCCESS;
 }
@@ -516,7 +517,7 @@ VOID DriverUnload(IN PDRIVER_OBJECT DriverObject)
     if (global.ScanThreadObject)
     {
         KeWaitForSingleObject(global.ScanThreadObject, Executive, KernelMode, false, nullptr);
-        ObDereferenceObject(global.ScanThreadObject );
+        ObDereferenceObject(global.ScanThreadObject);
         global.ScanThreadObject = nullptr;
     }
 
@@ -525,7 +526,6 @@ VOID DriverUnload(IN PDRIVER_OBJECT DriverObject)
         ObUnRegisterCallbacks(global.ObCallbackHandle);
         global.ObCallbackHandle = nullptr;
     }
-
 }
 
 extern "C" NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
@@ -597,7 +597,7 @@ extern "C" NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING Reg
     if (!NT_SUCCESS(status))
     {
         KdPrint(("[SimpleAntiCheat] Failed to reference thread object: 0x%X\n", status));
-		KeSetEvent(&global.ThreadStopEvent, IO_NO_INCREMENT, false);
+        KeSetEvent(&global.ThreadStopEvent, IO_NO_INCREMENT, false);
         ObUnRegisterCallbacks(global.ObCallbackHandle);
         PsSetCreateProcessNotifyRoutine(ProcessNotifyRoutine, true);
         return status;
