@@ -125,7 +125,7 @@ constexpr ULONG BASE_ALTITUDE = 375133;
 - `ObRegisterCallbacks` - Object Manager handle interception
 - `ZwQuerySystemInformation(SystemExtendedHandleInformation)` - Handle enumeration
 - `ZwQueryVirtualMemory` - Memory region inspection
-- `KeStackAttachProcess` - Cross-process context switching
+- `ObOpenObjectByPointer` - Kernel handle from object pointer
 - `SeLocateProcessImageName` - Process name retrieval
 
 **Supported Platforms**: Windows 10+ (x64)  
